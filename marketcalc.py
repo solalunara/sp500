@@ -22,7 +22,7 @@ def GetAnnualSalaryPreTax( age ):
 STARTING_AGE = 23;
 RETIREMENT_AGE = 50;
 INITIAL_VALUE = 0;
-MONTHLY_EXPENSES = 1000;
+MONTHLY_EXPENSES = 1200;
 ################################
 
 
@@ -31,6 +31,7 @@ NUM_SIMS = 10000;
 SAMPLING_PERIOD = 12;
 MONTHS_SIMULATED_ARR = np.arange( 1 * 12, 60 * 12, 12 );
 DIVIDEND_TAX_RATE = 0.5;
+CAPGAINS_TAX_RATE = 0.2;
 STANDARD_TAX_RATE = 0.3;
 #####################################
 
@@ -59,16 +60,35 @@ MONTHS_SIMULATED_MAX = MONTHS_SIMULATED_ARR[ -1 ];
 sim_data = np.array( [ INITIAL_VALUE for _ in range( NUM_SIMS ) ], dtype=np.float64 );
 sim_data.shape = (1,NUM_SIMS);
 total_contributions = [];
+total_withdrawn = [];
 for i in range( int( MONTHS_SIMULATED_MAX / SAMPLING_PERIOD + 1 ) ):
-    monthly_contrib = GetAnnualSalaryPreTax( STARTING_AGE + i * SAMPLING_PERIOD / 12 ) / 12 * ( 1 - STANDARD_TAX_RATE ) - MONTHLY_EXPENSES;
     last_contribution = 0;
+    last_withdrawn = 0;
     if ( len( total_contributions ) > 0 ):
         last_contribution = total_contributions[ -1 ];
-    new_array = sim_data[ -1 ] + RandomPeriodYield( data, sim_data[ -1 ], monthly_contrib, months=SAMPLING_PERIOD );
+        last_withdrawn = total_withdrawn[ -1 ];
+    
+    monthly_contrib = GetAnnualSalaryPreTax( STARTING_AGE + i * SAMPLING_PERIOD / 12 ) / 12 * ( 1 - STANDARD_TAX_RATE ) - MONTHLY_EXPENSES;
+
+    # calculate withdrawal from capital gains tax
+    monthly_contrib_taxincl = monthly_contrib;
+    monthly_withdrawal = 0;
+    if ( monthly_contrib < 0 ):
+        if ( last_contribution - last_withdrawn < 0 ):
+            monthly_contrib_taxincl = ( 1 + CAPGAINS_TAX_RATE ) * monthly_contrib;
+        elif ( last_contribution - last_withdrawn + monthly_contrib * SAMPLING_PERIOD < 0 ):
+            cap_gains_taxable = ( last_contribution - last_withdrawn + monthly_contrib * SAMPLING_PERIOD ) / SAMPLING_PERIOD;
+            monthly_contrib_taxincl = ( monthly_contrib - cap_gains_taxable ) + ( 1 + CAPGAINS_TAX_RATE ) * cap_gains_taxable;
+        else:
+            monthly_contrib_taxincl = monthly_contrib;
+        monthly_withdrawal = -monthly_contrib_taxincl;
+
+    new_array = sim_data[ -1 ] + RandomPeriodYield( data, sim_data[ -1 ], monthly_contrib_taxincl, months=SAMPLING_PERIOD );
     sim_data = np.vstack( (sim_data, new_array) );
     if ( monthly_contrib < 0 ):
         monthly_contrib = 0;
     total_contributions.append( last_contribution + SAMPLING_PERIOD * monthly_contrib );
+    total_withdrawn.append( last_withdrawn + SAMPLING_PERIOD * monthly_withdrawal );
 
 
 subzero_probabilities = [];
