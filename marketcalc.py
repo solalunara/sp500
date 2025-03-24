@@ -3,7 +3,39 @@ import random;
 import numpy as np;
 import matplotlib.pyplot as plt;
 
-DIVIDEND_TAX_RATE = 0.3;
+## Standard Program Parameters ##
+def GetAnnualSalaryPreTax( age ):
+    if ( age > RETIREMENT_AGE ):
+        return 0;
+
+    if ( age < 20 ):
+        return 24440;
+    if ( age < 30 ):
+        return 32292;
+    if ( age < 40 ):
+        return 39988;
+    if ( age < 50 ):
+        return 42796;
+    if ( age < 60 ):
+        return 40456;
+    return 36036;
+STARTING_AGE = 23;
+RETIREMENT_AGE = 50;
+INITIAL_VALUE = 0;
+MONTHLY_EXPENSES = 1000;
+################################
+
+
+## Non-standard Program Parameters ##
+NUM_SIMS = 10000;
+SAMPLING_PERIOD = 12;
+MONTHS_SIMULATED_ARR = np.arange( 1 * 12, 60 * 12, 12 );
+DIVIDEND_TAX_RATE = 0.5;
+STANDARD_TAX_RATE = 0.3;
+#####################################
+
+
+## Program ##
 def MonthYield( data, date_index, real_amnt_invested ):
     real_price = data[ 'Real Price' ][ date_index ].to_numpy();
     real_next_price = data[ 'Real Price' ][ date_index + 1 ].to_numpy();
@@ -20,23 +52,24 @@ def RandomPeriodYield( data, real_amnt_invested, monthly_contrib, months ):
         real_amnt += MonthYield( data, date_index + i, real_amnt ) + monthly_contrib;
     return real_amnt - real_amnt_invested;
 
-NUM_SIMS = 10000;
-INITIAL_VALUE = 0;
-MONTHLY_CONTRIB = 100000;
-SAMPLING_PERIOD = 12;
-MONTHS_SIMULATED_ARR = np.arange( 1 * 12, 60 * 12, 12 );
 
 data = pd.read_csv( 'ie_data.xls - Data.csv', quotechar='"' )
 
 MONTHS_SIMULATED_MAX = MONTHS_SIMULATED_ARR[ -1 ];
 sim_data = np.array( [ INITIAL_VALUE for _ in range( NUM_SIMS ) ], dtype=np.float64 );
 sim_data.shape = (1,NUM_SIMS);
+total_contributions = [];
 for i in range( int( MONTHS_SIMULATED_MAX / SAMPLING_PERIOD + 1 ) ):
-    new_array = sim_data[ -1 ] + RandomPeriodYield( data, sim_data[ -1 ], MONTHLY_CONTRIB, months=SAMPLING_PERIOD );
+    monthly_contrib = GetAnnualSalaryPreTax( STARTING_AGE + i * SAMPLING_PERIOD / 12 ) / 12 * ( 1 - STANDARD_TAX_RATE ) - MONTHLY_EXPENSES;
+    last_contribution = 0;
+    if ( len( total_contributions ) > 0 ):
+        last_contribution = total_contributions[ -1 ];
+    new_array = sim_data[ -1 ] + RandomPeriodYield( data, sim_data[ -1 ], monthly_contrib, months=SAMPLING_PERIOD );
     sim_data = np.vstack( (sim_data, new_array) );
+    if ( monthly_contrib < 0 ):
+        monthly_contrib = 0;
+    total_contributions.append( last_contribution + SAMPLING_PERIOD * monthly_contrib );
 
-if ( MONTHLY_CONTRIB < 0 ):
-    MONTHLY_CONTRIB = 0;
 
 subzero_probabilities = [];
 subinit_probabilities = [];
@@ -52,7 +85,7 @@ for MONTHS_SIMULATED in MONTHS_SIMULATED_ARR:
 
     subzero = np.array( np.where( sim_data[ index ] < 0 ) );
     subzero_prob = subzero.size / NUM_SIMS;
-    subinit = np.array( np.where( sim_data[ index ] < INITIAL_VALUE + MONTHLY_CONTRIB * MONTHS_SIMULATED ) );
+    subinit = np.array( np.where( sim_data[ index ] < INITIAL_VALUE + total_contributions[ index ] ) );
     subinit_prob = subinit.size / NUM_SIMS;
 
     subzero_probabilities.append( subzero_prob );
@@ -89,3 +122,4 @@ ret.set_ylabel( "Value" );
 ret.legend();
 
 plt.show();
+#############
